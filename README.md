@@ -30,6 +30,14 @@ cd offsectoolman
 chmod +x offsectoolman.sh
 ```
 
+## Running Directly from GitHub
+
+You can run the `offsectoolman` script directly from GitHub without downloading or installing it on your system. Use the following one-liner command:
+
+```
+bash <(curl -sSL https://raw.githubusercontent.com/ousbaailyas/offsectoolman/master/offsectoolsman) [OPTIONS]
+```
+
 ## Usage
 
 ```bash
