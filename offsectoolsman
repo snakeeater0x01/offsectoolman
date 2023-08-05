@@ -1,0 +1,412 @@
+#!/bin/bash
+
+# Define the color map for different log levels
+declare -A color_map=(
+    ["FAL"]="\e[38;2;255;3;78m"  # Fail: Red color for failure messages
+    ["SUC"]="\e[38;2;3;255;60m"  # Succ: Green color for success messages
+    ["INF"]="\033[0;34m"  # Info: Blue color for informational messages
+    ["WRN"]="\e[38;5;208m"       # Warn: Orange color for warning messages
+    ["USG"]="\e[0;90m"          # Usage: Dark gray color for usage information
+    ["APT"]="\e[38;2;25;12;255m"            # Apt: Light blue color for apt package manager messages
+    ["GOL"]="\e[38;2;0;255;246m" # Go: Aqua color for Go package manager messages
+    ["PDT"]="\e[38;2;121;9;116m" # Pdtm: Purple color for pdtm package manager messages
+    ["NPM"]="\e[38;2;243;253;45m" # Npm: Yellow color for npm package manager messages
+    ["PIP"]="\e[38;2;4;113;125m" # Pip: Blue-green color for pip3 package manager messages
+    ["IRed"]="\e[0;91m"
+    ["IBlack"]="\e[0;90m"
+    ["BOLD_GREEN_ON_BLACK"]="\033[1;32;40m"
+    ["BOLD_GREEN_ON_WHITE"]="\033[1;32;47m"
+    ["WHITE_ON_DARK"]="\033[0;37;40m"
+    ["BLACK_ON_WHITE"]="\033[0;30;47m"
+)
+
+
+NC='\033[0m' # Reset: To reset the text color
+
+# Configuration variables
+zshrc_file="$HOME/.zshrc"
+current_date=$(date +"%Y-%m-%d")
+current_datetime=$(date +"%Y-%m-%d %H:%M:%S")
+log_file="script_log_$current_date.log"
+default_file="./shared/tools.conf"
+offsectoolman_version=v1
+
+# Function to print colored log messages
+print_message() {
+    local log_level="$1"
+    local message="$2"
+    local logged_message=$(echo -e "[${color_map[$log_level]}${log_level}${NC}]  ${message}")
+    echo "${logged_message}" && echo "${logged_message}" | {
+        while IFS= read -r line; do
+            echo -e "${current_datetime}    $line" >> "$log_file"
+        done
+    }
+}
+
+# Mapping of package managers to their respective installation commands
+declare -A tools_install_map=(
+    ["apt"]="apt-get install --no-install-recommends"
+    ["npm"]="npm install -g"
+    ["go"]="go install -v"
+    ["pdtm"]="pdtm -i"
+    ["pip3"]="pip3 install"
+)
+
+# Mapping of package managers to their respective package manager installations
+declare -A pkg_mgr_install_map=(
+    ["npm"]="${tools_install_map[apt]} npm"
+    ["go"]="${tools_install_map[apt]} golang-go"
+    ["pdtm"]="${tools_install_map[go]} github.com/projectdiscovery/pdtm/cmd/pdtm@latest"
+    ["pip3"]="${tools_install_map[apt]} python3-pip"
+)
+
+stdbuf_command() {
+    local log_level="$1"
+    local command_input="$2"
+    stdbuf -oL $command_input | {
+        while IFS= read -r line; do
+            echo -e "[${color_map[$log_level]}$log_level${NC}]    $line"
+            echo -e "${current_datetime}    [${color_map[$log_level]}$log_level${NC}]    $line" >> "$log_file"
+        done
+    }
+}
+script_command() {
+    local log_level="$1"
+    local command_input="$2"
+    script -q -c "$command_input" | {
+        while IFS= read -r line; do
+            echo -e "[${color_map[$log_level]}$log_level${NC}]    $line"
+            echo -e "${current_datetime}    [${color_map[$log_level]}$log_level${NC}]    $line" >> "$log_file"
+        done
+    }
+}
+# Set up Path env
+path_env() {
+    GOBINPATH="$HOME/go/bin" 
+    PDTMBINPATH="$HOME/.pdtm/go/bin"
+    PIP3PATH="$HOME/.local/bin"
+    NEWPATH="$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH"
+    export PATH=$NEWPATH
+}
+
+reset_path_env() {
+    # path_env
+    GOBINPATH="$HOME/go/bin" 
+    PDTMBINPATH="$HOME/.pdtm/go/bin"
+    PIP3PATH="$HOME/.local/bin"
+    export PATH="$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH"
+    local PATHLINE="export PATH=\$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH" 2> /dev/null
+    local ZSHRC_FILE="$HOME/.zshrc"
+    if ! grep -qF "$PATHLINE" "$ZSHRC_FILE"; then
+    #     # Reset PATH environment variable in $ZSHRC_FILE
+    #     awk -v pattern="$PATHLINE" '!index($0, pattern)' "$ZSHRC_FILE" > "$ZSHRC_FILE.tmp" && mv "$ZSHRC_FILE.tmp" "$ZSHRC_FILE"
+    #     print_message "INF" "Reset PATH in $ZSHRC_FILE"
+    #     # print_message "WRN" "Removed paths from $ZSHRC_FILE: [$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')]"
+    #     print_message "WRN" "Added paths to $ZSHRC_FILE: [${color_map[IBlack]}$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')${NC}]"
+    #     echo "$PATHLINE" >> "$ZSHRC_FILE"
+    #     touch ~/.hushlogin
+    #     zsh -l
+    # else
+        print_message "INF" "Line not found in $ZSHRC_FILE"
+        print_message "WRN" "Added paths to $ZSHRC_FILE: [$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')]"
+        echo "$PATHLINE" >> "$ZSHRC_FILE"
+        touch ~/.hushlogin
+        zsh -l
+    fi
+    if ! grep -qF "$PATHLINE" "$ZSHRC_FILE"; then
+            print_message "FAL" "Can't Set PATH env in $ZSHRC_FILE."
+            print_message "USG" "echo '$PATHLINE' >> $ZSHRC_FILE"
+            exit 1
+    fi
+}
+
+# Function to set up npm global packages directory and configuration
+setup_npm_global() {
+
+    local npm_global_dir="$HOME/.npm-global"
+    local npmrc_file="$HOME/.npmrc"
+
+    # Check if npm global directory already exists
+    if [[ -d "$npm_global_dir" ]]; then
+        print_message "INF" "NPM global directory already exists. Skipping setup."
+        export PATH="$npm_global_dir/bin:$PATH"
+    else
+        print_message "INF" "Setting up NPM global directory..."
+        mkdir "$npm_global_dir"
+        echo "prefix=$npm_global_dir" >> "$npmrc_file"
+
+        # Update PATH variable in the current shell session
+        export PATH="$npm_global_dir/bin:$PATH"
+
+        print_message "INF" "NPM global directory setup completed."
+    fi
+}
+
+install_missing_pkg_mgr() {
+    local pkg_mgr_to_install=("$@")
+    local missing_pkg_mgr=()
+
+    # Check if package managers are already installed
+    for pkg_mgr in "${pkg_mgr_to_install[@]}"; do
+        if ! command -v "$pkg_mgr" &> /dev/null; then
+            missing_pkg_mgr+=("$pkg_mgr")
+        fi
+    done
+
+    # Install missing package managers, if any
+    if [ "${#missing_pkg_mgr[@]}" -gt 0 ]; then
+        
+        print_message "INF" "Installing missing package managers: ${color_map[IBlack]}${missing_pkg_mgr[*]}${NC}"
+
+        for pkg_mgr_to_install in "${missing_pkg_mgr[@]}"; do
+            if [ "$pkg_mgr_to_install" = "pdtm" ]; then
+                # Pdtm requires Go, install it first if missing
+                if ! command -v go &> /dev/null; then
+                    print_message "INF" "$pkg_mgr_to_install requires Go, installing it..."
+                    stdbuf_command "APT" "$privilege_command ${pkg_mgr_install_map[go]}"
+                fi
+                # Install pdtm
+                script_command "GOL" "${pkg_mgr_install_map[$pkg_mgr_to_install]}"
+            else
+                # Install other package managers
+                stdbuf_command "APT" "$privilege_command ${pkg_mgr_install_map[$pkg_mgr_to_install]}"
+            fi
+        done
+
+        local not_installed_pkg_mgrs=()
+        # Check if package managers are already installed
+        for pkg_mgr_check in "${missing_pkg_mgr[@]}"; do
+            if ! command -v "$pkg_mgr_check" &> /dev/null; then
+                not_installed_pkg_mgrs+=("$pkg_mgr_check")
+            fi
+        done
+
+        if [ "${#not_installed_pkg_mgrs[@]}" -gt 0 ]; then 
+            print_message "FAL" "Failed to install ${color_map[IRed]}${not_installed_pkg_mgrs[*]}${NC}"
+            for not_installed_pkg_mgr in "${not_installed_pkg_mgrs[@]}"; do
+                print_message "USG" "${color_map[IRed]}${pkg_mgr_install_map[$not_installed_pkg_mgr]}${NC}"
+            done
+            exit 1
+        else
+            print_message "SUC" "All package managers successfully installed."
+        fi
+    elif [ "${#missing_pkg_mgr[@]}" -eq 1 ]; then
+        print_message "INF" "Package manager ${missing_pkg_mgr[1]} are already installed."
+    fi
+}
+
+install_tools() {
+    local pkg_mgr="$1"
+    local file="$2"
+    declare -A tools_map
+
+    # Check if the package manager exists in the configuration file
+    if grep -qF "[$pkg_mgr]" "$file"; then
+        # Extract tool-source:tool-cli mappings for the specified package manager
+        package_list=$(awk '/\['"$pkg_mgr"'\]/{flag=1; next} /^\[/{flag=0} flag && $1 !~ /^#/{print $0}' "$file")
+
+        # Check if the package_list is not empty before processing
+        if [ -n "$package_list" ]; then
+            # Populate the tools_map associative array
+            while IFS=':' read -r tool_source tool_cli; do
+                tools_map["$tool_source"]="$tool_cli"
+            done <<< "$package_list"
+
+            # Checking for tools that are not installed
+            local not_found_source=()
+            local not_found_cli=()
+            for tool in "${!tools_map[@]}"; do
+                if [ "$pkg_mgr" = "apt" ]; then
+                    if ! dpkg -l "$tool" &> /dev/null; then
+                        not_found_cli+=("${tools_map[$tool]}")
+                        not_found_source+=("$tool")
+                    fi
+                else
+                    if ! command -v "${tools_map[$tool]}" &> /dev/null; then
+                        not_found_cli+=("${tools_map[$tool]}")
+                        not_found_source+=("$tool")
+                    fi
+                fi
+            done
+
+            # Installing the tools that are not found
+            if [ "${#not_found_source[@]}" -gt 0 ]; then
+                if [ "${#not_found_source[@]}" -eq 1 ]; then
+                    print_message "INF" "${#not_found_source[@]} '$pkg_mgr' tool will be installed: ${color_map[IBlack]}${not_found_source[*]}${NC}"
+                else 
+                    print_message "INF" "${#not_found_source[@]} '$pkg_mgr' tools will be installed: ${color_map[IBlack]}${not_found_source[*]}${NC}"
+                fi
+                local install_output
+
+                if [ "$pkg_mgr" = "go" ]; then
+                    for not_found_source in "${not_found_source[@]}"; do
+                        script_command "GOL" "${tools_install_map[$pkg_mgr]} $not_found_source"
+                    done
+                elif [ "$pkg_mgr" = "apt" ]; then
+                    stdbuf_command "APT" "$privilege_command ${tools_install_map[$pkg_mgr]} ${not_found_source[*]}"
+                elif [ "$pkg_mgr" = "npm" ]; then
+                    setup_npm_global
+                    stdbuf_command "NPM" "${tools_install_map[$pkg_mgr]} ${not_found_source[*]}"
+                elif [ "$pkg_mgr" = "pdtm" ]; then
+                    pdtm_not_installed_tools_list=$(IFS=,; echo "${not_found_source[*]}")
+                    stdbuf_command "PDT" "${tools_install_map[pdtm]} $pdtm_not_installed_tools_list"
+                else
+                    stdbuf_command "PIP" "${tools_install_map[$pkg_mgr]} ${not_found_source[*]}"
+                fi
+
+                # Check if the tools were installed successfully
+                local not_installed_source=()
+                for tool_check in "${not_found_source[@]}"; do
+                    if [ "$pkg_mgr" = "apt" ]; then
+                        if ! dpkg -l "$tool_check" &> /dev/null; then
+                            not_installed_source+=("$tool_check")
+                        fi
+                    else
+                        if ! command -v "${tools_map[$tool_check]}" &> /dev/null; then
+                            not_installed_source+=("$tool_check")
+                        fi
+                    fi
+                done
+
+                if [ "${#not_installed_source[@]}" -gt 0 ]; then
+                    print_message "FAL" "Failed to install ${#not_installed_source[@]} '$pkg_mgr' tool: ${color_map[IBlack]}${not_installed_source[*]}${NC}"
+                    print_message "USG" "${tools_install_map[$pkg_mgr]} ${color_map[IRed]}${not_installed_source[*]}${NC}"
+                    exit 1
+                fi
+            else
+                print_message "INF" "All '$pkg_mgr' tools are already installed"
+            fi
+        else
+            print_message "INF" "No tools found for $pkg_mgr package manager."
+        fi
+    else
+        print_message "FAL" "Package manager '$pkg_mgr' not found or commented in '$file'"
+        exit 1
+    fi
+}
+
+# Process the selected flags and install the required tools
+process_selected_flags() {
+    local selected_flags=("$@")
+    
+    for pkg_mgr in "${selected_flags[@]}"; do
+        install_tools "$pkg_mgr" "$file"
+    done
+}
+
+# Function to display usage message
+print_usage() {
+    echo "       Usage: $0 [OPTIONS]"
+    echo "       Options:"
+    echo "       -f, --file FILE    Specify the configuration FILE (required)"
+    echo "       --apt              Install missing 'apt' package manager"
+    echo "       --npm              Install missing 'npm' package manager"
+    echo "       --go               Install missing 'go' package manager"
+    echo "       --pdtm             Install missing 'pdtm' package manager"
+    echo "       --pip3             Install missing 'pip3' package manager"
+    echo "       -h, --help         Show this usage message"
+    exit 1
+}
+
+# Parse command-line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -f|--file)
+            file="$2"
+            shift
+            ;;
+        --apt)
+            selected_flags+=("apt")
+            ;;
+        --npm)
+            selected_flags+=("npm")
+            ;;
+        --go)
+            selected_flags+=("go")
+            ;;
+        --pdtm)
+            selected_flags+=("pdtm")
+            ;;
+        --pip3)
+            selected_flags+=("pip3")
+            ;;
+        -h|--help)
+            print_usage
+            ;;
+        *)
+            print_message "FAL" "Invalid option: $1"
+            print_usage
+            ;;
+    esac
+    shift
+done
+
+# Check if a configuration file is provided, use default if not
+if [ -z "$file" ]; then
+    # Use default configuration file if it exists, otherwise, print FAL message and exit
+    if [ -f "$default_file" ]; then
+        file="$default_file"
+    else
+        print_message "FAL" "Please specify a configuration file using the '-f' option."
+        ls
+        print_usage
+    fi
+fi
+
+# Check if the specified configuration file exists
+if [ ! -f "$file" ]; then
+    print_message "FAL" "Configuration file '$file' not found."
+    print_usage
+fi
+
+# Check if any package manager is selected for installation
+if [ ${#selected_flags[@]} -eq 0 ]; then
+    print_message "FAL" "No package manager selected for installation."
+    print_message "USG" "Please use at least one of the '--apt', '--npm', '--go', '--pdtm', or '--pip3' options."
+    print_usage
+fi
+
+# Check if the specified configuration file exists
+if [ ! -f "$file" ]; then
+    print_message "FAL" "Configuration file '$file' not found."
+    print_usage
+fi
+
+function title() {
+    emojis=("🐙" "🧰")
+    shuffled_emojis=($(shuf -e "${emojis[@]}")) 
+    # Get the current hour (24-hour format)
+    current_hour=$(date +%H)
+    # Set the dark mode if the time is between 10:00 pm and 07:00 am
+    if (( current_hour >= 22 || current_hour < 7 )); then
+        # Dark mode
+        local title_mod="BOLD_GREEN_ON_BLACK"
+        local paragraph_mod="WHITE_ON_DARK"
+    else
+        # White mode
+        local title_mod="BOLD_GREEN_ON_WHITE"
+        local paragraph_mod="BLACK_ON_WHITE"
+    fi
+    # echo -e "${color_map[On_Black]}                                 \n       Living off the land       \n       Network scaner ${shuffled_emojis[0]}         \n                                 ${NC}"
+    echo -e "\n${color_map[$title_mod]}                                   "
+    echo -e "       offsectoolman $offsectoolman_version            ${NC}${color_map[$paragraph_mod]}"
+    echo -e "                                   "
+    echo -e "       A tools manager to          "
+    echo -e "       Automate the offensive      "
+    echo -e "       Security lab setup ${shuffled_emojis[0]}       "
+    echo -e "                                   \n${NC}"
+}
+title
+reset_path_env
+
+privilege_command=""
+# Check if the script is run with root privileges
+if [ "$UID" -ne 0 ]; then
+    privilege_command="sudo"
+fi
+
+# Check if package managers are installed and install missing ones
+install_missing_pkg_mgr "${selected_flags[@]}"
+
+# Process the selected flags and install the required tools
+process_selected_flags "${selected_flags[@]}"
