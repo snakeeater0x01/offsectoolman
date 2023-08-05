@@ -27,7 +27,7 @@ cd offsectoolman
 2. Make the script executable:
 
 ```bash
-chmod +x offsectoolman.sh
+chmod +x offsectoolman.sha
 ```
 
 ## Running Directly from GitHub
@@ -56,7 +56,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/ousbaailyas/offsectoolman/mas
 
 ## Configuration File
 
-The configuration file (`offsectoolman.conf`) allows you to define the tools and their respective package managers. The syntax is as follows:
+The configuration file (`tools.conf.conf`) allows you to define the tools and their respective package managers. The syntax is as follows:
 
 ```
 [apt]
@@ -102,17 +102,13 @@ Install missing 'apt' and 'go' package managers:
 
 This project is licensed under the [MIT License](LICENSE).
 
-## Acknowledgments
-
-- Thanks to [OpenAI](https://openai.com) for their amazing GPT-3.5 model.
-
 ## Contributing
 
 Contributions are welcome! Please create an issue or submit a pull request.
 
 ## Disclaimer
 
-Use this tool responsibly and only on systems you own or have permission to test. The authors are not responsible for any misuse or damage caused by this tool.
+Use this tool responsibly and only on systems you own or have permission to test. 
 
 ## Contact
 
