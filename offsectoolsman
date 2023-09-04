@@ -45,7 +45,7 @@ print_message() {
 
 # Mapping of package managers to their respective installation commands
 declare -A tools_install_map=(
-    ["apt"]="apt-get install --no-install-recommends"
+    ["apt"]="apt-get install --no-install-recommends -y"
     ["npm"]="npm install -g"
     ["go"]="go install -v"
     ["pdtm"]="pdtm -i"
@@ -97,21 +97,21 @@ reset_path_env() {
     export PATH="$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH"
     local PATHLINE="export PATH=\$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH" 2> /dev/null
     local ZSHRC_FILE="$HOME/.zshrc"
-    if ! grep -qF "$PATHLINE" "$ZSHRC_FILE"; then
-    #     # Reset PATH environment variable in $ZSHRC_FILE
-    #     awk -v pattern="$PATHLINE" '!index($0, pattern)' "$ZSHRC_FILE" > "$ZSHRC_FILE.tmp" && mv "$ZSHRC_FILE.tmp" "$ZSHRC_FILE"
-    #     print_message "INF" "Reset PATH in $ZSHRC_FILE"
-    #     # print_message "WRN" "Removed paths from $ZSHRC_FILE: [$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')]"
-    #     print_message "WRN" "Added paths to $ZSHRC_FILE: [${color_map[IBlack]}$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')${NC}]"
-    #     echo "$PATHLINE" >> "$ZSHRC_FILE"
-    #     touch ~/.hushlogin
-    #     zsh -l
-    # else
+    if grep -qF "$PATHLINE" "$ZSHRC_FILE"; then
+        # Reset PATH environment variable in $ZSHRC_FILE
+        awk -v pattern="$PATHLINE" '!index($0, pattern)' "$ZSHRC_FILE" > "$ZSHRC_FILE.tmp" && mv "$ZSHRC_FILE.tmp" "$ZSHRC_FILE"
+        print_message "INF" "Reset PATH in $ZSHRC_FILE"
+        # print_message "WRN" "Removed paths from $ZSHRC_FILE: [$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')]"
+        print_message "WRN" "Added paths to $ZSHRC_FILE: [${color_map[IBlack]}$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')${NC}]"
+        echo "$PATHLINE" >> "$ZSHRC_FILE"
+        touch ~/.hushlogin
+        source ~/.bashrc
+    else
         print_message "INF" "Line not found in $ZSHRC_FILE"
         print_message "WRN" "Added paths to $ZSHRC_FILE: [$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')]"
         echo "$PATHLINE" >> "$ZSHRC_FILE"
         touch ~/.hushlogin
-        zsh -l
+        source ~/.bashrc
     fi
     if ! grep -qF "$PATHLINE" "$ZSHRC_FILE"; then
             print_message "FAL" "Can't Set PATH env in $ZSHRC_FILE."
@@ -398,6 +398,7 @@ function title() {
 }
 title
 reset_path_env
+# source ~/.zshrc &
 
 privilege_command=""
 # Check if the script is run with root privileges
