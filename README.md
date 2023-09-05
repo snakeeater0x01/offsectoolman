@@ -27,7 +27,7 @@ cd offsectoolman
 2. Make the script executable:
 
 ```bash
-chmod +x offsectoolman.sha
+chmod +x offsectoolman.sh
 ```
 
 ## Running Directly from GitHub
