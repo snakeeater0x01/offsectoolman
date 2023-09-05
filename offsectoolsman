@@ -19,12 +19,9 @@ declare -A color_map=(
     ["WHITE_ON_DARK"]="\033[0;37;40m"
     ["BLACK_ON_WHITE"]="\033[0;30;47m"
 )
-
-
 NC='\033[0m' # Reset: To reset the text color
-
 # Configuration variables
-zshrc_file="$HOME/.zshrc"
+ZSHRC_FILE="$HOME/.zshrc"
 current_date=$(date +"%Y-%m-%d")
 current_datetime=$(date +"%Y-%m-%d %H:%M:%S")
 log_file="script_log_$current_date.log"
@@ -45,7 +42,7 @@ print_message() {
 
 # Mapping of package managers to their respective installation commands
 declare -A tools_install_map=(
-    ["apt"]="apt-get install --no-install-recommends -y"
+    ["apt"]="apt-get -y install --no-install-recommends"
     ["npm"]="npm install -g"
     ["go"]="go install -v"
     ["pdtm"]="pdtm -i"
@@ -60,13 +57,14 @@ declare -A pkg_mgr_install_map=(
     ["pip3"]="${tools_install_map[apt]} python3-pip"
 )
 
+# Output transformation
 stdbuf_command() {
     local log_level="$1"
     local command_input="$2"
     stdbuf -oL $command_input | {
         while IFS= read -r line; do
-            echo -e "[${color_map[$log_level]}$log_level${NC}]    $line"
-            echo -e "${current_datetime}    [${color_map[$log_level]}$log_level${NC}]    $line" >> "$log_file"
+            echo -e "[${color_map[$log_level]}$log_level${NC}]  $line"
+            echo -e "${current_datetime}  [${color_map[$log_level]}$log_level${NC}]  $line" >> "$log_file"
         done
     }
 }
@@ -75,48 +73,25 @@ script_command() {
     local command_input="$2"
     script -q -c "$command_input" | {
         while IFS= read -r line; do
-            echo -e "[${color_map[$log_level]}$log_level${NC}]    $line"
-            echo -e "${current_datetime}    [${color_map[$log_level]}$log_level${NC}]    $line" >> "$log_file"
+            echo -e "[${color_map[$log_level]}$log_level${NC}]  $line"
+            echo -e "${current_datetime}  [${color_map[$log_level]}$log_level${NC}]  $line" >> "$log_file"
         done
     }
 }
-# Set up Path env
-path_env() {
-    GOBINPATH="$HOME/go/bin" 
-    PDTMBINPATH="$HOME/.pdtm/go/bin"
-    PIP3PATH="$HOME/.local/bin"
-    NEWPATH="$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH"
-    export PATH=$NEWPATH
-}
 
 reset_path_env() {
-    # path_env
-    GOBINPATH="$HOME/go/bin" 
+    GOBINPATH="$HOME/go/bin"
     PDTMBINPATH="$HOME/.pdtm/go/bin"
     PIP3PATH="$HOME/.local/bin"
-    export PATH="$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH"
-    local PATHLINE="export PATH=\$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH" 2> /dev/null
-    local ZSHRC_FILE="$HOME/.zshrc"
-    if grep -qF "$PATHLINE" "$ZSHRC_FILE"; then
-        # Reset PATH environment variable in $ZSHRC_FILE
-        awk -v pattern="$PATHLINE" '!index($0, pattern)' "$ZSHRC_FILE" > "$ZSHRC_FILE.tmp" && mv "$ZSHRC_FILE.tmp" "$ZSHRC_FILE"
-        print_message "INF" "Reset PATH in $ZSHRC_FILE"
-        # print_message "WRN" "Removed paths from $ZSHRC_FILE: [$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')]"
-        print_message "WRN" "Added paths to $ZSHRC_FILE: [${color_map[IBlack]}$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')${NC}]"
-        echo "$PATHLINE" >> "$ZSHRC_FILE"
-        touch ~/.hushlogin
-        source ~/.bashrc
+    PATH="$PATH:$GOBINPATH:$PDTMBINPATH:$PIP3PATH"
+    local EXPECTED_PATH="export PATH=\"$PATH\""
+    local FILE_PATH="$HOME/.zshrc"
+    if grep -q "$EXPECTED_PATH" "$FILE_PATH"; then
+    print_message "INF" "Reset PATH in $ZSHRC_FILE"
+    sed -i "\|$EXPECTED_PATH|d" "$FILE_PATH"
+    echo "$EXPECTED_PATH" >> "$FILE_PATH"
     else
-        print_message "INF" "Line not found in $ZSHRC_FILE"
-        print_message "WRN" "Added paths to $ZSHRC_FILE: [$(echo "$PATHLINE" | sed 's/export PATH=\$PATH://' | tr ':' ' ')]"
-        echo "$PATHLINE" >> "$ZSHRC_FILE"
-        touch ~/.hushlogin
-        source ~/.bashrc
-    fi
-    if ! grep -qF "$PATHLINE" "$ZSHRC_FILE"; then
-            print_message "FAL" "Can't Set PATH env in $ZSHRC_FILE."
-            print_message "USG" "echo '$PATHLINE' >> $ZSHRC_FILE"
-            exit 1
+    echo "$EXPECTED_PATH" >> "$FILE_PATH"
     fi
 }
 
@@ -373,8 +348,6 @@ if [ ! -f "$file" ]; then
 fi
 
 function title() {
-    emojis=("🐙" "🧰")
-    shuffled_emojis=($(shuf -e "${emojis[@]}")) 
     # Get the current hour (24-hour format)
     current_hour=$(date +%H)
     # Set the dark mode if the time is between 10:00 pm and 07:00 am
@@ -393,13 +366,11 @@ function title() {
     echo -e "                                   "
     echo -e "       A tools manager to          "
     echo -e "       Automate the offensive      "
-    echo -e "       Security lab setup ${shuffled_emojis[0]}       "
+    echo -e "       Security lab setup 🧰       "
     echo -e "                                   \n${NC}"
 }
 title
 reset_path_env
-# source ~/.zshrc &
-
 privilege_command=""
 # Check if the script is run with root privileges
 if [ "$UID" -ne 0 ]; then
