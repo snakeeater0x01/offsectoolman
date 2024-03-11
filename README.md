@@ -64,55 +64,33 @@ bash <(curl -sSL https://raw.githubusercontent.com/ousbaailyas/offsectoolman/mas
 To add tools to the YAML configuration file, follow this structure:
 
 ```yaml
-# Tools based on APT package manager
-apt:
-  manager_action: ""
-  actions:
-    install: "sudo apt install --no-install-recommends"
-    upgrade: "sudo apt upgrade"
-    remove: "sudo apt remove"
 
-  tools:
-    - name: msfconsole
-      source: metasploit-framework
-      description: "Penetration testing framework"
-      properties:
-        type: [CLI]
-        category: [exploitation, post-exploitation, vulnerability]
-        tag: [exploitation, post-exploitation, security, vulnerability, payload, payloads, database, scanner]
+managers:
+  # Tools based on Go package manager
+  go:
+    manager_action: "sudo apt install golang curl ca-certificates"
+    actions:
+      install: "go install -v"
+      upgrade: "go get -u"
+      remove: "go clean"
 
-    - name: sqlmap
-      source: sqlmap
-      description: "Automatic SQL injection and database takeover tool"
-      properties:
-        type: [CLI]
-        category: [vulnerability, exploitation]
-        tag: [security, vulnerability, database]
+    tools:
+      - name: pdtm
+        source: github.com/projectdiscovery/pdtm/cmd/pdtm@latest
+        description: "ProjectDiscovery's Open Source Tool Manager"
+        properties:
+          type: [CLI]
+          category: [development]
+          tag: [development, security, tool-manager]
 
-# Tools based on Go package manager
-go:
-  manager_action: "sudo apt install golang curl ca-certificates"
-  actions:
-    install: "go install -v"
-    upgrade: "go get -u"
-    remove: "go clean"
-
-  tools:
-    - name: pdtm
-      source: github.com/projectdiscovery/pdtm/cmd/pdtm@latest
-      description: "ProjectDiscovery's Open Source Tool Manager"
-      properties:
-        type: [CLI]
-        category: [development]
-        tag: [development, security, tool-manager]
-
-    - name: smap
-      source: github.com/s0md3v/smap/cmd/smap@latest
-      description: "A fast network scanner designed for Internet-scale"
-      properties:
-        type: [CLI]
-        category: [information-gathering]
-        tag: [information-gathering, security, network, scanner]
+      - name: smap
+        source: github.com/s0md3v/smap/cmd/smap@latest
+        description: "A fast network scanner designed for Internet-scale"
+        properties:
+          type: [CLI]
+          category: [information-gathering]
+          tag: [information-gathering, security, network, scanner]
+....
 ```
 
 ## Version
