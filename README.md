@@ -4,11 +4,12 @@
 
 ## Features
 
-- Automates the installation of package managers like apt, npm, go, pdtm, and pip3.
-- Installs and manages various tools for offensive security tasks.
-- Customizable configuration file to define the tools and their respective package managers.
-- Color-coded log messages for better visibility and readability.
-- Simple command-line interface for easy interaction.
+- **Package Managers Support:** Install, update, and remove tools using different package managers.
+- **Tag Filtering:** Select tools based on tags for easier categorization and identification.
+- **Type and Category Selection:** Choose tools based on their types and categories.
+- **YAML Configuration:** Customize and add tools to the YAML configuration file.
+- **Version Information:** Display the current version of OffSecToolMan.
+- **Help Menu:** Access a detailed help message with the `-h` or `--help` option.
 
 ## Requirements
 
@@ -37,79 +38,89 @@ You can run the `offsectoolman` script directly from GitHub without downloading 
 ```
 bash <(curl -sSL https://raw.githubusercontent.com/ousbaailyas/offsectoolman/master/offsectoolsman) [OPTIONS]
 ```
-
 ## Usage
 
 ```bash
-./offsectoolman.sh [OPTIONS]
+./offsectoolman [-all] [-pm <package_managers>] [--tag <tags>] [--type <types>] [--category <categories>] [-i] [-ia] [-u] [-ua] [-r] [-ra] [-v] [-f <file>] [-h]
 ```
 
-**Options:**
+## Options
 
-- `-f, --file FILE`: Specify the configuration FILE (required).
-- `--apt`: Install missing 'apt' package manager.
-- `--npm`: Install missing 'npm' package manager.
-- `--go`: Install missing 'go' package manager.
-- `--pdtm`: Install missing 'pdtm' package manager.
-- `--pip3`: Install missing 'pip3' package manager.
-- `-h, --help`: Show the usage message.
+- **-all:** Select all available tools.
+- **-pm, --managers:** Comma-separated list of package managers.
+- **--tag:** Comma-separated list of tags.
+- **--type:** Comma-separated list of types.
+- **--category:** Comma-separated list of categories.
+- **-l, --list:** List selected tools.
+- **-i, --install:** Install selected tools.
+- **-u, --update:** Update selected tools.
+- **-r, --remove:** Remove selected tools.
+- **-f, --file:** Specify the YAML configuration file.
+- **-v, --version:** Print version.
+- **-h, --help:** Print this help message.
 
-## Configuration File
+## Adding Tools to YAML Configuration File
 
-The configuration file (`tools.conf.conf`) allows you to define the tools and their respective package managers. The syntax is as follows:
+To add tools to the YAML configuration file, follow this structure:
 
+```yaml
+# Tools based on APT package manager
+apt:
+  manager_action: ""
+  actions:
+    install: "sudo apt install --no-install-recommends"
+    upgrade: "sudo apt upgrade"
+    remove: "sudo apt remove"
+
+  tools:
+    - name: msfconsole
+      source: metasploit-framework
+      description: "Penetration testing framework"
+      properties:
+        type: [CLI]
+        category: [exploitation, post-exploitation, vulnerability]
+        tag: [exploitation, post-exploitation, security, vulnerability, payload, payloads, database, scanner]
+
+    - name: sqlmap
+      source: sqlmap
+      description: "Automatic SQL injection and database takeover tool"
+      properties:
+        type: [CLI]
+        category: [vulnerability, exploitation]
+        tag: [security, vulnerability, database]
+
+# Tools based on Go package manager
+go:
+  manager_action: "sudo apt install golang curl ca-certificates"
+  actions:
+    install: "go install -v"
+    upgrade: "go get -u"
+    remove: "go clean"
+
+  tools:
+    - name: pdtm
+      source: github.com/projectdiscovery/pdtm/cmd/pdtm@latest
+      description: "ProjectDiscovery's Open Source Tool Manager"
+      properties:
+        type: [CLI]
+        category: [development]
+        tag: [development, security, tool-manager]
+
+    - name: smap
+      source: github.com/s0md3v/smap/cmd/smap@latest
+      description: "A fast network scanner designed for Internet-scale"
+      properties:
+        type: [CLI]
+        category: [information-gathering]
+        tag: [information-gathering, security, network, scanner]
 ```
-[apt]
-tool-source:tool-cli
-...
 
-[npm]
-tool-source:tool-cli
-...
+## Version
 
-[go]
-tool-source:tool-cli
-...
-
-[pdtm]
-tool-source:tool-cli
-...
-
-[pip3]
-tool-source:tool-cli
-...
-```
-
-Replace `tool-source` with the name of the tool and `tool-cli` with the corresponding command to install the tool using the specified package manager.
-
-### Default tools source file
-
-If the `-f` option is not provided, the script will use the default configuration file `./shared/tools.conf` located in the same directory as the script. If the default file is not found, the script will print an error message and exit.
-
-## Examples
-
-Install missing 'apt' and 'go' package managers:
+To display the current version of OffSecToolMan, use the following command:
 
 ```bash
-./offsectoolman.sh -f ./shared/tools.conf --apt --go -pdtm 
+./offsectoolman -v
 ```
 
-## Screenshots
-
- ![Screenshot 2023-08-05 at 8.32.40 PM](./Screenshot.png)
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-
-## Contributing
-
-Contributions are welcome! Please create an issue or submit a pull request.
-
-## Disclaimer
-
-Use this tool responsibly and only on systems you own or have permission to test. 
-
-## Contact
-
-For any questions or inquiries, feel free to contact us at support@example.com.
+Feel free to explore the various options and customize your security toolset with OffSecToolMan!
