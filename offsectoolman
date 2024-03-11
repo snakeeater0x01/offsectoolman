@@ -1,0 +1,287 @@
+#!/bin/bash
+# set -x
+# Function to print help message
+function print_help() { 
+    echo -e "Usage: \n$0 [-all] [-pm <package_managers>] [--tag <tags>] [--type <types>] [--category <categories>] [-i] [-ia] [-u] [-ua] [-r] [-ra] [-v] [-f <file>] [-h]"
+    echo "\nOptions:"
+    echo -e "\n  -m, --managers string[]      Comma-separated list of package managers."
+    echo "  --tag string[]               Comma-separated list of tags."
+    echo "  --type string[]              Comma-separated list of types."
+    echo "  --category string[]          Comma-separated list of categories."
+    echo "  -l, --list                   list selected tools."
+    echo "  -i, --install                Install selected tools."
+    echo "  -u, --update                 Update selected tools."
+    echo "  -r, --remove                 Remove selected tools."
+    echo "  -f, --file string            Specify YAML file."
+    echo "  -v, --version                Print version."
+    echo "  -h, --help                   Print this help message."
+    exit 0
+}
+# declare -A colors_map=( ["GRAY24"]="\e[38;5;245m" ["RED9"]="\e[38;5;9m" ["GREEN36"]="\e[38;5;36m" ["GREEN43"]="\e[38;5;43m" ["YELLOW226"]="\e[38;5;226m" ["CYAN116"]="\e[38;5;116m" ["PURPLE99"]="\e[38;5;99m" ["BLUE12"]="\e[38;5;14m" ["ORANGE116"]="\e[38;5;16m" ["ORANGE214"]="\e[38;5;214m") 
+
+env_file="$HOME/.zshrc"
+
+GRAY24="\e[38;5;245m"
+RED9="\e[38;5;9m"
+GREEN36="\e[38;5;36m"
+GREEN43="\e[38;5;43m"
+YELLOW226="\e[38;5;226m"
+CYAN116="\e[38;5;116m"
+PURPLE99="\e[38;5;99m"
+BLUE12="\e[38;5;14m"
+ORANGE116="\e[38;5;16m"
+ORANGE214="\e[38;5;214m"
+
+FAIL="\033[38;5;196m"
+SUCC="\033[38;5;49m"
+INFO="\033[38;5;33m"
+WARN="\033[38;5;208m"
+QUET="\033[38;5;99m"
+GRAY="\033[38;5;8m"
+USAG="$GRAY"
+RC="\033[0m"
+
+# Function to display colored messages
+print_message() {
+    local level="$1"
+    local message="$2"
+    local color=""
+
+    case "$level" in
+        QUET|FAIL|SUCC|INFO|WARN|USAG)
+            color="${!level}" 
+            printf "[$color$level$RC]  $message\n"
+            ;;
+        *)
+            echo -e "${GRAY}Invalid log level: $level${RC}"
+            return 1
+            ;;
+    esac
+}
+
+path_env() {
+    # PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    local PATH_UPDATED=false
+    declare -a paths missing_paths
+    # Check for missing paths based on selected managers
+    for manager in "${selected_managers[@]}"; do
+        case $manager in
+            "go") paths+=("$HOME/go/bin") ;;
+            "pdtm") paths+=("$HOME/.pdtm/go/bin" "$HOME/go/bin") ;;
+            "npm") paths+=("$HOME/.local/bin") ;;
+        esac
+    done
+
+    for path in "${paths[@]}"; do
+        if [[ ":$PATH:" != *":$path:"* ]]; then
+            PATH_UPDATED=true
+            missing_paths+=("$path")
+        fi
+    done
+
+    if [ "$PATH_UPDATED" = true ]; then
+        if grep -qE '# Custom PATH by offsectoolman' "$env_file"  &> /dev/null; then
+            print_message "WARN" "Updating PATH env in '$env_file' file..."
+            print_message "INFO" "Added ${#missing_paths[@]} new PATH(S): ${missing_paths[*]}"
+            sed -i -e "/# Custom PATH by offsectoolman/!b;n;c\\
+PATH=\"$PATH:$(IFS=:; echo "${missing_paths[*]}")\"
+" "$env_file"
+        else
+            print_message "WARN" "Appending new PATH env into '$env_file' file..."
+            print_message "INFO" "Added ${#missing_paths[@]} new PATH(S): ${missing_paths[*]}"
+            echo '# Custom PATH by offsectoolman' >> "$env_file"
+            echo "PATH=\"$PATH:$(IFS=:; echo "${missing_paths[*]}")\"" >> "$env_file"
+        fi
+        export "$(echo "PATH=\"$PATH:$(IFS=:; echo "${missing_paths[*]}")\"")"
+        print_message "INFO" "Use: source '"$env_file"'"
+    fi
+}
+
+managers_check() {
+    available_managers=($(yq -r '.managers | keys[]'  $yaml_file)) 
+    for selected_manager in "${selected_managers[@]}"; do 
+        if [[ ! " ${available_managers[*]} " =~ " $selected_manager " ]]; then
+            print_message "FAIL" "The '$selected_manager' package manager is not available."
+            exit 1
+        fi
+    done
+    print_message "INFO" "Using ${#selected_managers[@]} manager(s): ${selected_managers[*]}"
+}
+
+managers_install() {
+    for selected_manager in "${selected_managers[@]}"; do 
+        local manager_action="$(yq -r --arg manager "$selected_manager" '.managers[$manager].manager_action' "$yaml_file")"
+
+        if ! command -v "$selected_manager" &> /dev/null; then
+            print_message "INFO" "$selected_manager is missing, installing it..."
+
+            if [ "$selected_manager" == "pdtm" ] && ! command -v "go" &> /dev/null; then
+                print_message "INFO" "pdtm requires Go, installing it..."
+                # sudo apt install golang-go 
+                eval "$(yq -r --arg manager "go" '.managers[$manager].manager_action' "$yaml_file")"
+            fi
+
+            if eval $manager_action $stdouterr; then
+                if ! command -v "$selected_manager" &>/dev/null; then
+                    print_message "FAIL" "Failed to install $selected_manager manager."
+                    print_message "USAG" "$manager_action"
+                    exit 1
+                fi
+            else
+                print_message "FAIL" "Failed to install selected manager(s)"
+                exit 1
+            fi
+        fi
+    done
+}
+
+parse_yaml() {
+    local TYPE_JSON CATEGORY_JSON TAGS_JSON
+    
+    # Join array elements with double quotes and comma-space separator if array is not empty
+    [ ${#selected_types[@]} -gt 0 ] && TYPE_JSON=$(printf "\"%s\", " "${selected_types[@]}" | sed 's/, $//')
+    [ ${#selected_categories[@]} -gt 0 ] && CATEGORY_JSON=$(printf "\"%s\", " "${selected_categories[@]}" | sed 's/, $//')
+    [ ${#selected_tags[@]} -gt 0 ] && TAGS_JSON=$(printf "\"%s\", " "${selected_tags[@]}" | sed 's/, $//')
+
+    yq -c \
+    --arg manager "$selected_manager" \
+    --argjson type_filter "[$TYPE_JSON]" \
+    --argjson category_filter "[$CATEGORY_JSON]" \
+    --argjson tags_filter "[$TAGS_JSON]" \
+    '.managers[$manager].tools[] | select(
+        (.properties.type | any(. | IN($type_filter[])) or ($type_filter | length) == 0) and
+        (.properties.category | any(. | IN($category_filter[])) or ($category_filter | length) == 0) and
+        (.properties.tag | any(. | IN($tags_filter[])) or ($tags_filter | length) == 0)
+    ) | {manager: $manager} + .' "$yaml_file"
+}
+
+get_tools_info() {
+    local tools_data=()
+    while IFS= read -r line; do tools_data+=("$line"); done < <(parse_yaml)
+
+    for data in "${tools_data[@]}"; do
+        IFS='|' read -r manager name source description type category tag <<<"$(echo "$data" | jq -r '"\(.manager)|\(.name)|\(.source)|\(.description)|\(.properties.type | map(tostring) | join(", "))|\(.properties.category | map(tostring) | join(", "))|\(.properties.tag | map(tostring) | join(", "))"')"
+        if [ "$silent" = "false" ]; then
+            if [ "$full" = "false" ]; then
+                print_message "INFO" "$name [$GREEN43${manager^^}${RC}] [$ORANGE214${category}${RC}] [$PURPLE99${type}${RC}] $description."
+                tools_map["$name"]="$source"
+            else 
+                print_message "INFO" "Name: $name\n        Description: $description.\n        Manager: $GREEN43${manager^^}${RC}\n        Categories: [$ORANGE214${category}${RC}]\n        Types: [$PURPLE99${type}${RC}]\n        Tags: [$BLUE12${tag}${RC}]"
+                tools_map["$name"]="$source"            
+            fi
+        else
+            tools_map["$name"]="$source"
+        fi
+    done
+}
+
+tools_manager() {
+    local check_command="$( [ "$action" = "install" ] && echo "! command -v" || echo "command -v")"
+    local target_tools_count=0
+
+    for selected_manager in "${selected_managers[@]}"; do
+        local tool_action="$(yq -r --arg manager "$selected_manager" --arg action "$action" '.managers[$manager].actions[$action]' "$yaml_file")"
+
+        declare -A tools_map target_tools
+        get_tools_info
+
+        for tool in "${!tools_map[@]}"; do 
+            if eval $check_command $tool &>/dev/null; then
+                target_tools["$tool"]="${tools_map[$tool]}"
+                ((target_tools_count++))
+            fi
+        done
+
+        if [ "$target_tools_count" -gt 0 ]; then
+            print_message "INFO" "$target_tools_count tool(s) to $action using '$selected_manager' manager: ${!target_tools[*]}"
+
+            if [ "$selected_manager" = "go" ] || [ "$selected_manager" = "pdtm" ]; then
+                for target_tool in "${!target_tools[@]}"; do
+                    if eval $tool_action ${target_tools[$target_tool]} $stdouterr; then
+                        if eval $check_command $target_tool &>/dev/null;  then
+                            print_message "FAIL" "Failed to $action $target_tool."
+                            print_message "USAG" "$tool_action $target_tool"
+                        else
+                            print_message "SUCC" "Success to $action '$target_tool' using '$selected_manager'"
+                        fi
+                    else
+                        print_message "FAIL" "Failed to $action selected tools using '$selected_manager'"
+                        exit 1
+                    fi
+                done
+            else
+                if eval $tool_action "${target_tools[*]}" $stdouterr; then
+                    for target_tool in "${!target_tools[@]}"; do
+                        if eval $check_command $target_tool &>/dev/null;  then
+                            print_message "FAIL" "Failed to $action $target_tool."
+                            print_message "USAG" "$tool_action $target_tool"
+                        else
+                            print_message "SUCC" "Success to $action '$target_tool' using '$selected_manager'"
+                        fi
+                    done
+                else
+                    print_message "FAIL" "Failed to $action selected tools using '$selected_manager'"
+                    exit 1
+                fi
+            fi
+        else
+            print_message "SUCC" "No tools to $action using '$selected_manager' manager."
+        fi
+
+        unset tools_map target_tools
+    done
+}
+
+function main() {
+    local yaml_file="./toolstest.yaml" action="list" silent="false" full="false"
+    local -a selected_managers selected_tools selected_tags selected_types selected_categories
+
+    # Parse command line arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -m|--manager) IFS=',' read -ra selected_managers <<< "$2"; shift ;;
+            --tag) IFS=',' read -ra selected_tags <<< "$2"; shift ;;
+            --type) IFS=',' read -ra selected_types <<< "$2"; shift ;;
+            --category) IFS=',' read -ra selected_categories <<< "$2"; shift ;;
+            -t|--tool) IFS=',' read -ra selected_tools <<< "$2"; shift ;;
+            -a|--action) action="$2"; shift ;;
+            -i|--install) action="install" ;;
+            -u|--upgrade) action="upgrade" ;;
+            -r|--remove) action="remove" ;;
+            -l|--list) action="list" ;;
+            --full) full="true" ;;
+            -s|--silent) silent="true"; shift ;;
+            -f|--file) yaml_file="$2"; shift ;;
+            -h|--help) print_help; ;;
+            -v|--version|-version) print_version; ;;
+            *) echo "Unknown option: $1"; print_help; ;;
+        esac
+        shift
+    done
+    # Check if YAML file exists
+    if [ ! -f "$yaml_file" ]; then
+        print_message "FAIL" "Invalid YAML file: $yaml_file"
+        exit 1
+    fi
+
+    # Use all available managers if no manager is selected
+    if [ ${#selected_managers[@]} -eq 0 ]; then
+        selected_managers=($(yq -r '.managers | keys[]' "$yaml_file"))
+    fi
+
+    managers_check
+    
+    if [ "$action" = "list" ]; then
+        for selected_manager in "${selected_managers[@]}"; do
+            declare -A tools_map
+            get_tools_info
+            unset tools_map
+        done
+        exit 0
+    fi
+    path_env
+    local stdouterr="$([ "$silent" = "true" ] && echo "&>/dev/null")"
+    managers_install
+    tools_manager
+}
+main "$@"
